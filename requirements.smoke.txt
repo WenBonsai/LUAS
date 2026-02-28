@@ -1,0 +1,16 @@
+# Minimal deps for running a small Qwen model + tiny LoRA finetune + basic metrics on CPU.
+# Install with:
+#   py -3.11 -m pip install -r requirements.smoke.txt
+
+# Core
+torch
+transformers>=4.38
+accelerate
+peft
+
+tqdm
+numpy
+
+# Used by eval/metric-style normalization in this repo
+fuzzywuzzy
+python-Levenshtein
