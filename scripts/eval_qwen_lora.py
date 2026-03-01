@@ -1,4 +1,4 @@
-"""Evaluate a base Qwen model + LoRA adapter on an SFT JSONL dataset.
+"""Evaluate a base Qwen model + optional LoRA adapter on an SFT JSONL dataset.
 
 Metrics ("accuracy-like"):
 - exact_match: prediction text == gold output text (strict)
@@ -9,11 +9,17 @@ Metrics ("accuracy-like"):
 This isn't the official LUAS metric/JGA; it's a lightweight check that runs locally.
 
 Example (PowerShell):
-  .\.venv\Scripts\python.exe scripts\eval_qwen_lora.py `
-    --model_name "Qwen/Qwen2-0.5B-Instruct" `
-    --adapter_dir runs\qwen_lora_full\lora_adapter `
-    --data_file data_full\dev.jsonl `
+  .venv/Scripts/python.exe scripts/eval_qwen_lora.py
+    --model_name "Qwen/Qwen2-0.5B-Instruct"
+    --adapter_dir runs/qwen_lora_full/lora_adapter
+    --data_file data_full/dev.jsonl
     --max_examples 200
+
+Run base model only (no adapter):
+  python3 scripts/eval_qwen_lora.py
+    --model_name "Qwen/Qwen2-0.5B-Instruct"
+    --data_file data_full/dev.jsonl
+    --max_examples 10 --dst_metrics
 """
 
 from __future__ import annotations
@@ -248,7 +254,7 @@ def collate(batch: list[dict[str, Any]]) -> dict[str, Any]:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--model_name", type=str, default="Qwen/Qwen2-0.5B-Instruct")
-    ap.add_argument("--adapter_dir", type=str, required=True)
+    ap.add_argument("--adapter_dir", type=str, default="", help="Path to LoRA adapter dir. Omit to run base model only.")
     ap.add_argument("--data_file", type=str, required=True)
     ap.add_argument("--max_seq_len", type=int, default=256)
     ap.add_argument("--batch_size", type=int, default=1)
@@ -285,8 +291,8 @@ def main() -> int:
 
     args = ap.parse_args()
 
-    adapter_dir = Path(args.adapter_dir)
-    if not adapter_dir.exists():
+    adapter_dir = Path(args.adapter_dir) if args.adapter_dir else None
+    if adapter_dir is not None and not adapter_dir.exists():
         raise FileNotFoundError(f"Adapter dir not found: {adapter_dir}")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -304,7 +310,12 @@ def main() -> int:
     if getattr(base.config, "pad_token_id", None) is None:
         base.config.pad_token_id = tokenizer.pad_token_id
 
-    model = PeftModel.from_pretrained(base, str(adapter_dir))
+    if adapter_dir is not None:
+        print(f"[eval] Loading LoRA adapter from {adapter_dir}")
+        model = PeftModel.from_pretrained(base, str(adapter_dir))
+    else:
+        print("[eval] No adapter_dir provided — evaluating base model only.")
+        model = base
     model.to(device)
     model.eval()
 
