@@ -1,4 +1,4 @@
-"""Minimal LoRA finetune for small Qwen models on CPU.
+"""Minimal LoRA finetune for small Qwen models on CPU or GPU.
 
 Dataset format: JSONL lines with {instruction, input, output}
 Created by: scripts/convert_multiwoz_jsonl_to_sft.py
@@ -6,14 +6,23 @@ Created by: scripts/convert_multiwoz_jsonl_to_sft.py
 This is *not* the full LUAS training pipeline. It's a pragmatic, low-RAM path to
 "replicate the repo" training on a local machine.
 
+Run (Linux/UCloud):
+  python3 scripts/train_qwen_lora.py
+    --train_file data_full/train.jsonl
+    --dev_file data_full/dev.jsonl
+    --model_name Qwen/Qwen2-0.5B-Instruct
+    --max_steps 1200
+    --max_seq_len 256
+    --output_dir runs/qwen_lora_ucloud
+
 Run (PowerShell):
-  .\.venv\Scripts\python.exe scripts\train_qwen_lora.py ^
-    --train_file data_local\train.jsonl ^
-    --dev_file data_local\dev.jsonl ^
-    --model_name Qwen/Qwen2-0.5B-Instruct ^
-    --max_steps 40 ^
-    --max_seq_len 256 ^
-    --output_dir runs\qwen_lora
+  .venv/Scripts/python.exe scripts/train_qwen_lora.py
+    --train_file data_local/train.jsonl
+    --dev_file data_local/dev.jsonl
+    --model_name Qwen/Qwen2-0.5B-Instruct
+    --max_steps 40
+    --max_seq_len 256
+    --output_dir runs/qwen_lora
 
 Outputs:
 - runs/qwen_lora/lora_adapter/    (PEFT adapter)
