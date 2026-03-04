@@ -88,11 +88,15 @@ def main(**kwargs):
 
     print(f'{"x" * 20}    {model_name}    {"x" * 20}')
 
+    # Get HuggingFace token from environment
+    hf_token = os.environ.get('HF_TOKEN') or os.environ.get('HUGGING_FACE_HUB_TOKEN')
+    
     # Load the pre-trained model and setup its configuration
     model = LlamaForCausalLM.from_pretrained(
         model_name,
         load_in_8bit=True if train_config.quantization else None,
         device_map="auto" if train_config.quantization else None,
+        token=hf_token,
     )
     if train_config.enable_fsdp and train_config.use_fast_kernels:
         """
@@ -114,9 +118,13 @@ def main(**kwargs):
     # Convert the model to bfloat16 if fsdp and pure_bf16 is enabled
     if train_config.enable_fsdp and fsdp_config.pure_bf16:
         model.to(torch.bfloat16)
+    # For CPU training, use float32 instead of bfloat16
+    elif train_config.pure_bf16 and not torch.cuda.is_available():
+        print("CPU detected: Using float32 instead of bfloat16")
+        model.to(torch.float32)
 
     # Load the tokenizer and add special tokens
-    tokenizer = LlamaTokenizer.from_pretrained(model_name)
+    tokenizer = LlamaTokenizer.from_pretrained(model_name, token=hf_token)
     tokenizer.add_special_tokens(
             {
                 "pad_token": "<PAD>",
@@ -155,7 +163,10 @@ def main(**kwargs):
         if fsdp_config.fsdp_activation_checkpointing:
             policies.apply_fsdp_checkpointing(model)
     elif not train_config.quantization and not train_config.enable_fsdp:
-        model.to("cuda")
+        # Try CUDA first, fall back to CPU if not available
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        print(f"Using device: {device}")
+        model.to(device)
 
     dataset_config = generate_dataset_config(train_config, kwargs)
     if train_config.dataset_dir != '':
