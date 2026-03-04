@@ -1,6 +1,9 @@
 #!/bin/bash
 set -euo pipefail
-set -x
+
+if [[ "${DEBUG:-0}" == "1" ]]; then
+    set -x
+fi
 
 # Configuration - modify based on your UCloud setup
 NUM_GPUS=1  # Change this to match your GPU count (1, 2, or 4)
@@ -11,8 +14,10 @@ DATASET_NAME="agent_sft_act_dataset"
 DATASET_DIR=${DATASET_DIR:-"../generation/multiwoz/converters/woz.2.2.gen"}
 
 export PYTHONPATH=`pwd`
-export HF_TOKEN=${HF_TOKEN:-"your_huggingface_token_here"}
-export HUGGING_FACE_HUB_TOKEN=${HUGGING_FACE_HUB_TOKEN:-"your_huggingface_token_here"}
+
+if [[ -z "${HF_TOKEN:-}" && -z "${HUGGING_FACE_HUB_TOKEN:-}" ]]; then
+    echo "Warning: HF_TOKEN/HUGGING_FACE_HUB_TOKEN not set; gated models (e.g., Llama-2) will fail to download." >&2
+fi
 
 echo "PYTHONPATH: ${PYTHONPATH}"
 echo "NUM_GPUS: ${NUM_GPUS}"
