@@ -18,3 +18,4 @@ runs/qwen_lora_gpu_test/
 # OS / editor noise
 .DS_Store
 Thumbs.db
+*.log

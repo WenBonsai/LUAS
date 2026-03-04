@@ -1,0 +1,23 @@
+# Core ML Dependencies
+torch
+transformers==4.34.0
+accelerate==0.23.0
+peft
+datasets
+bitsandbytes
+
+# Training utilities
+fire
+sentencepiece
+protobuf
+tiktoken
+
+# Data processing
+fuzzywuzzy
+tqdm
+
+# API (optional for data generation)
+openai
+
+# Monitoring (optional)
+wandb

@@ -2,7 +2,7 @@
 set -x
 
 # Configuration - modify based on your UCloud setup
-NUM_GPUS=4  # Change this to match your GPU count (1, 2, or 4)
+NUM_GPUS=1  # Change this to match your GPU count (1, 2, or 4)
 DATASET_NAME="agent_sft_act_dataset"
 
 export PYTHONPATH=`pwd`
