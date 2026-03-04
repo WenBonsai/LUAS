@@ -119,7 +119,7 @@ def main(**kwargs):
     if train_config.enable_fsdp and fsdp_config.pure_bf16:
         model.to(torch.bfloat16)
     # For CPU training, use float32 instead of bfloat16
-    elif train_config.pure_bf16 and not torch.cuda.is_available():
+    elif fsdp_config.pure_bf16 and not torch.cuda.is_available():
         print("CPU detected: Using float32 instead of bfloat16")
         model.to(torch.float32)
 
