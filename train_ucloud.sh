@@ -9,11 +9,41 @@ fi
 NUM_GPUS=1  # Change this to match your GPU count (1, 2, or 4)
 DATASET_NAME="agent_sft_act_dataset"
 
+# Model to train. For GPU jobs use: meta-llama/Llama-2-7b-hf
+# For CPU smoke-tests use TinyLlama (public, no token needed, ~600MB)
+MODEL_NAME=${MODEL_NAME:-"TinyLlama/TinyLlama-1.1B-Chat-v1.0"}
+
+# CPU thread count — set to number of vCPUs on the machine
+NUM_THREADS=${NUM_THREADS:-$(nproc)}
+
 # Directory that contains train.act.json (relative to ./training_scripts after cd)
 # Note: repo root also contains `woz.2.2.gen/train.act.json` but it may be empty.
 DATASET_DIR=${DATASET_DIR:-"../generation/multiwoz/converters/woz.2.2.gen"}
 
+# How often to checkpoint and evaluate (in training steps)
+CKPT_STEPS=${CKPT_STEPS:-100}
+EVAL_STEPS=${EVAL_STEPS:-200}
+
+# CPU_TEST=1 → tiny smoke-test (50 train samples, no eval, fast finish)
+# Set CPU_TEST=0 (default) for a real training run
+CPU_TEST=${CPU_TEST:-1}
+if [[ "${CPU_TEST}" == "1" ]]; then
+    echo "[CPU_TEST mode] Using tiny dataset for fast smoke-test. Set CPU_TEST=0 for full training."
+    MAX_TRAIN=${MAX_TRAIN:-50}
+    MAX_VAL=${MAX_VAL:-0}       # 0 = skip validation entirely
+    CKPT_STEPS=999999            # effectively disable mid-run checkpoints
+    EVAL_STEPS=999999            # effectively disable mid-run eval
+    RUN_VALIDATION="--run_validation False"
+else
+    MAX_TRAIN=${MAX_TRAIN:--1}   # -1 = full dataset
+    MAX_VAL=${MAX_VAL:--1}
+    RUN_VALIDATION=""
+fi
+
 export PYTHONPATH=`pwd`
+export OMP_NUM_THREADS=${NUM_THREADS}
+export MKL_NUM_THREADS=${NUM_THREADS}
+export TORCH_NUM_THREADS=${NUM_THREADS}
 
 if [[ -z "${HF_TOKEN:-}" && -z "${HUGGING_FACE_HUB_TOKEN:-}" ]]; then
     echo "Warning: HF_TOKEN/HUGGING_FACE_HUB_TOKEN not set; gated models (e.g., Llama-2) will fail to download." >&2
@@ -21,6 +51,8 @@ fi
 
 echo "PYTHONPATH: ${PYTHONPATH}"
 echo "NUM_GPUS: ${NUM_GPUS}"
+echo "MODEL: ${MODEL_NAME}"
+echo "CPU threads: ${NUM_THREADS}"
 
 cd ./training_scripts
 
@@ -31,7 +63,7 @@ if [[ ! -s "${DATASET_DIR}/train.act.json" ]]; then
     exit 1
 fi
 
-MODEL_TYPE="7b"
+MODEL_TYPE="1b"  # used only in output dir naming
 LR=2e-5
 BATCH_SIZE=4
 EPOCH=1
@@ -71,7 +103,7 @@ if [ "$USE_FSDP" = true ]; then
         --nproc_per_node=$NUM_GPUS \
         llama_finetuning.py \
         --enable_fsdp \
-        --model_name meta-llama/Llama-2-${MODEL_TYPE}-hf \
+        --model_name ${MODEL_NAME} \
         --use_peft \
         --peft_method lora \
         --output_dir ${SAVE_DIR} \
@@ -85,7 +117,7 @@ if [ "$USE_FSDP" = true ]; then
 else
     # Single GPU training without FSDP
     python llama_finetuning.py \
-        --model_name meta-llama/Llama-2-${MODEL_TYPE}-hf \
+        --model_name ${MODEL_NAME} \
         --use_peft \
         --peft_method lora \
         --output_dir ${SAVE_DIR} \
@@ -95,7 +127,12 @@ else
         --dataset_type gen \
         --batch_size_training ${BATCH_SIZE} \
         --num_epochs ${EPOCH} \
-        --lr ${LR}
+        --lr ${LR} \
+        --check_point_steps ${CKPT_STEPS} \
+        --evaluation_steps ${EVAL_STEPS} \
+        --max_train_samples ${MAX_TRAIN} \
+        --max_val_samples ${MAX_VAL} \
+        ${RUN_VALIDATION}
 fi
 
 # Convert FSDP checkpoint to HuggingFace format (only needed for multi-GPU)
@@ -104,7 +141,7 @@ if [ "$USE_FSDP" = true ]; then
     python inference/checkpoint_converter_fsdp_hf.py \
         --fsdp_checkpoint_path ${SAVE_DIR} \
         --consolidated_model_path ${SAVE_DIR}-HF \
-        --HF_model_path_or_name meta-llama/Llama-2-${MODEL_TYPE}-hf
+        --HF_model_path_or_name ${MODEL_NAME}
     
     STAGE1_MODEL="${SAVE_DIR}-HF"
 else
@@ -147,7 +184,12 @@ else
         --dataset_type real \
         --batch_size_training ${BATCH_SIZE} \
         --num_epochs ${EPOCH} \
-        --lr ${LR}
+        --lr ${LR} \
+        --check_point_steps ${CKPT_STEPS} \
+        --evaluation_steps ${EVAL_STEPS} \
+        --max_train_samples ${MAX_TRAIN} \
+        --max_val_samples ${MAX_VAL} \
+        ${RUN_VALIDATION}
 fi
 
 # Convert final checkpoint (only needed for multi-GPU)

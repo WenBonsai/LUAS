@@ -10,6 +10,8 @@ import fire
 # Unused imports removed
 from training_scripts.utils import fsdp_auto_wrap_policy
 from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
     LlamaForCausalLM,
     LlamaTokenizer,
     default_data_collator,
@@ -94,11 +96,13 @@ def main(**kwargs):
     hf_token = os.environ.get('HF_TOKEN') or os.environ.get('HUGGING_FACE_HUB_TOKEN')
     
     # Load the pre-trained model and setup its configuration
-    model = LlamaForCausalLM.from_pretrained(
+    # AutoModelForCausalLM works for Llama-2, TinyLlama, Mistral, etc.
+    model = AutoModelForCausalLM.from_pretrained(
         model_name,
         load_in_8bit=True if train_config.quantization else None,
         device_map="auto" if train_config.quantization else None,
         token=hf_token,
+        trust_remote_code=True,
     )
     if train_config.enable_fsdp and train_config.use_fast_kernels:
         """
@@ -126,12 +130,9 @@ def main(**kwargs):
         model.to(torch.float32)
 
     # Load the tokenizer and add special tokens
-    tokenizer = LlamaTokenizer.from_pretrained(model_name, token=hf_token)
-    tokenizer.add_special_tokens(
-            {
-                "pad_token": "<PAD>",
-            }
-        )
+    tokenizer = AutoTokenizer.from_pretrained(model_name, token=hf_token, trust_remote_code=True)
+    if tokenizer.pad_token is None:
+        tokenizer.add_special_tokens({"pad_token": "<PAD>"})
 
     if train_config.peft_model:
         model = PeftModel.from_pretrained(model, train_config.peft_model)
@@ -152,11 +153,13 @@ def main(**kwargs):
             freeze_transformer_layers(train_config.num_freeze_layers)
 
         mixed_precision_policy, wrapping_policy = get_policies(fsdp_config, rank)
-        my_auto_wrapping_policy = fsdp_auto_wrap_policy(model, LlamaDecoderLayer)
-   
+        from transformers.models.llama.modeling_llama import LlamaDecoderLayer as _LlamaDecoderLayer
+        _layers = [m for m in model.modules() if isinstance(m, _LlamaDecoderLayer)]
+        my_auto_wrapping_policy = fsdp_auto_wrap_policy(model, _LlamaDecoderLayer) if _layers else wrapping_policy
+
         model = FSDP(
             model,
-            auto_wrap_policy= my_auto_wrapping_policy if train_config.use_peft else wrapping_policy,
+            auto_wrap_policy=my_auto_wrapping_policy if train_config.use_peft else wrapping_policy,
             mixed_precision=mixed_precision_policy if not fsdp_config.pure_bf16 else None,
             sharding_strategy=fsdp_config.sharding_strategy,
             device_id=torch.cuda.current_device(),
@@ -173,6 +176,10 @@ def main(**kwargs):
     dataset_config = generate_dataset_config(train_config, kwargs)
     if train_config.dataset_dir != '':
         dataset_config.dataset_dir = train_config.dataset_dir
+    if train_config.max_train_samples != -1:
+        dataset_config.max_train_samples = train_config.max_train_samples
+    if train_config.max_val_samples != -1:
+        dataset_config.max_val_samples = train_config.max_val_samples
     print(dataset_config.dataset, dataset_config.dataset_dir)
     # import pdb; pdb.set_trace()
     
