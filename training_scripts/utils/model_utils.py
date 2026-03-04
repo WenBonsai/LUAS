@@ -14,7 +14,10 @@ import torch.distributed as dist
 from torch.distributed.fsdp import StateDictType
 from training_scripts import model_checkpointing
 from transformers import LlamaForCausalLM, LlamaTokenizer
-from pkg_resources import packaging
+try:
+    from pkg_resources import packaging
+except ImportError:
+    from packaging import version as packaging
 from .memory_utils import MemoryTrace
 from torch import nn
 import torch.cuda.nccl as nccl

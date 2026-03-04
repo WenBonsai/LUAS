@@ -11,6 +11,7 @@ fire
 sentencepiece
 protobuf
 tiktoken
+packaging
 
 # Data processing
 fuzzywuzzy

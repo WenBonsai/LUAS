@@ -41,7 +41,7 @@ fi
 # Install dependencies
 echo "Installing Python dependencies..."
 pip install transformers==4.34.0 accelerate==0.23.0 peft datasets bitsandbytes -q
-pip install fire sentencepiece protobuf tiktoken fuzzywuzzy tqdm openai -q
+pip install fire sentencepiece protobuf tiktoken fuzzywuzzy tqdm openai packaging -q
 
 echo ""
 echo "=========================================="
