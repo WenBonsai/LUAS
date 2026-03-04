@@ -24,8 +24,8 @@ echo "========== UCloud init started at $(date) ==========" | tee -a "${LOG_FILE
 
 # ── 1. System dependencies ───────────────────────────────────
 echo "[1/5] Installing system packages..." | tee -a "${LOG_FILE}"
-apt-get update -qq
-apt-get install -y -qq git python3 python3-pip python3-venv curl 2>&1 | tee -a "${LOG_FILE}"
+sudo apt-get update -qq 2>&1 | tee -a "${LOG_FILE}"
+sudo apt-get install -y -qq git python3 python3-pip python3-venv curl 2>&1 | tee -a "${LOG_FILE}"
 
 # ── 2. Clone repo (or pull if already exists) ────────────────
 echo "[2/5] Cloning repo..." | tee -a "${LOG_FILE}"
