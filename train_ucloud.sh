@@ -7,7 +7,8 @@ NUM_GPUS=1  # Change this to match your GPU count (1, 2, or 4)
 DATASET_NAME="agent_sft_act_dataset"
 
 # Directory that contains train.act.json (relative to ./training_scripts after cd)
-DATASET_DIR=${DATASET_DIR:-"../woz.2.2.gen"}
+# Note: repo root also contains `woz.2.2.gen/train.act.json` but it may be empty.
+DATASET_DIR=${DATASET_DIR:-"../generation/multiwoz/converters/woz.2.2.gen"}
 
 export PYTHONPATH=`pwd`
 export HF_TOKEN=${HF_TOKEN:-"your_huggingface_token_here"}
@@ -18,10 +19,10 @@ echo "NUM_GPUS: ${NUM_GPUS}"
 
 cd ./training_scripts
 
-if [[ ! -f "${DATASET_DIR}/train.act.json" ]]; then
-    echo "Error: dataset file not found: ${DATASET_DIR}/train.act.json" >&2
+if [[ ! -s "${DATASET_DIR}/train.act.json" ]]; then
+    echo "Error: dataset file missing or empty: ${DATASET_DIR}/train.act.json" >&2
     echo "Tip: set DATASET_DIR to the folder containing train.act.json, e.g.:" >&2
-    echo "  DATASET_DIR=../woz.2.2.gen bash train_ucloud.sh" >&2
+    echo "  DATASET_DIR=../generation/multiwoz/converters/woz.2.2.gen bash train_ucloud.sh" >&2
     exit 1
 fi
 
@@ -71,6 +72,7 @@ if [ "$USE_FSDP" = true ]; then
         --output_dir ${SAVE_DIR} \
         --pure_bf16 \
         --dataset ${DATASET_NAME} \
+    --dataset_dir ${DATASET_DIR} \
         --dataset_type gen \
         --batch_size_training ${BATCH_SIZE} \
         --num_epochs ${EPOCH} \
@@ -122,6 +124,7 @@ if [ "$USE_FSDP" = true ]; then
         --output_dir ${SAVE_DIR_REAL} \
         --pure_bf16 \
         --dataset ${DATASET_NAME} \
+    --dataset_dir ${DATASET_DIR} \
         --dataset_type real \
         --batch_size_training ${BATCH_SIZE} \
         --num_epochs ${EPOCH} \
@@ -135,7 +138,7 @@ else
         --output_dir ${SAVE_DIR_REAL} \
         --pure_bf16 \
         --dataset ${DATASET_NAME} \
-    --dataset_dir ${DATASET_DIR} \
+        --dataset_dir ${DATASET_DIR} \
         --dataset_type real \
         --batch_size_training ${BATCH_SIZE} \
         --num_epochs ${EPOCH} \

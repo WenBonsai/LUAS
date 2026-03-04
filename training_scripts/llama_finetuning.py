@@ -72,7 +72,9 @@ def main(**kwargs):
         rank = int(os.environ["RANK"])
         world_size = int(os.environ["WORLD_SIZE"])
     else:
-        world_size = 1.
+        local_rank = 0
+        rank = 0
+        world_size = 1
 
     if torch.distributed.is_initialized():
         torch.cuda.set_device(rank)
