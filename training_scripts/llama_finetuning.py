@@ -220,12 +220,12 @@ def main(**kwargs):
             )
         
     # Create DataLoaders for the training and validation dataset
-        pin_memory = torch.cuda.is_available()
+    pin_memory = torch.cuda.is_available()
     train_dataloader = torch.utils.data.DataLoader(
         dataset_train,
         batch_size=train_config.micro_batch_size,
         num_workers=train_config.num_workers_dataloader,
-            pin_memory=pin_memory,
+        pin_memory=pin_memory,
         sampler=train_sampler if train_sampler else None,
         drop_last=True,
         collate_fn=default_data_collator,
