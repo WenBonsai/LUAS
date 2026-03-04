@@ -122,15 +122,21 @@ def evaluation(model, train_config, eval_dataloader, local_rank, tokenizer):
     if train_config.enable_fsdp:
         world_size = int(os.environ["WORLD_SIZE"])
     model.eval()
+
+    if train_config.enable_fsdp:
+        # In torchrun, LOCAL_RANK is the correct device index for this process.
+        device_index = int(os.environ.get("LOCAL_RANK", "0"))
+        target_device = torch.device(device_index)
+    else:
+        target_device = next(model.parameters()).device
+
     eval_preds = []
     eval_loss = 0.0  # Initialize evaluation loss
     with MemoryTrace() as memtrace:
         for step, batch in enumerate(tqdm(eval_dataloader, colour="green", desc="evaluating Epoch")):
             for key in batch.keys():
-                if train_config.enable_fsdp:
-                    batch[key] = batch[key].to(local_rank)
-                else:
-                    batch[key] = batch[key].to('cuda:0')
+                if isinstance(batch[key], torch.Tensor):
+                    batch[key] = batch[key].to(target_device)
             # Ensure no gradients are computed for this scope to save memory
             with torch.no_grad():
                 # Forward pass and compute loss
