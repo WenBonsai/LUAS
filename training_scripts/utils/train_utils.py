@@ -63,21 +63,34 @@ def train(model,
     # import pdb; pdb.set_trace()
     wandb_writer = WanDBWriter(project=train_config.wandb_project, name=train_config.wandb_name, rank=rank)
 
+    log_every = int(os.environ.get("LOG_EVERY", "20"))
+
     accu_step = first_step
     for epoch in range(train_config.num_epochs):
-        train_sampler.set_epoch(epoch)
+        if train_sampler is not None and hasattr(train_sampler, "set_epoch"):
+            train_sampler.set_epoch(epoch)
         epoch_start_time = time.perf_counter()
 
         with MemoryTrace() as memtrace:  # track the memory usage
             model.train()
             total_loss = 0.0
-            for step, batch in enumerate(tqdm(train_dataloader, colour="blue", desc=f"Training Epoch{epoch}")):
+            show_progress = (not train_config.enable_fsdp) or (rank == 0)
+            progress = tqdm(
+                train_dataloader,
+                colour="blue",
+                desc=f"Training Epoch{epoch}",
+                dynamic_ncols=True,
+                disable=not show_progress,
+            )
+            target_device = torch.device(local_rank) if train_config.enable_fsdp else next(model.parameters()).device
+            for step, batch in enumerate(progress):
                 accu_step += 1
                 for key in batch.keys():
                     if train_config.enable_fsdp:
                         batch[key] = batch[key].to(local_rank)
                     else:
-                        batch[key] = batch[key].to('cuda:0')
+                        if isinstance(batch[key], torch.Tensor):
+                            batch[key] = batch[key].to(target_device)
                 loss = model(**batch).loss
                 loss = loss / gradient_accumulation_steps
 
@@ -115,7 +128,21 @@ def train(model,
                     if rank == 0:
                         print(f"\n step {step} is completed and loss is {loss.detach().float()}")
                 else:
-                    print(f"\n step {step} is completed and loss is {loss.detach().float()}")
+                    if (step == 0) or ((step + 1) % log_every == 0):
+                        print(f"\n step {step} is completed and loss is {loss.detach().float()}")
+
+                if show_progress and ((step == 0) or ((step + 1) % log_every == 0)):
+                    try:
+                        lr = lr_scheduler.get_lr()[0]
+                    except Exception:
+                        try:
+                            lr = lr_scheduler.get_last_lr()[0]
+                        except Exception:
+                            lr = None
+                    progress.set_postfix({
+                        "loss": float(loss.detach().float()),
+                        **({"lr": lr} if lr is not None else {}),
+                    })
 
                 if accu_step % train_config.check_point_steps == 0 and not torch.isnan(loss).any():
                     save_model(model, train_config, fsdp_config, rank, optimizer, accu_step=accu_step)
@@ -269,21 +296,34 @@ def train_partition(model,
     # import pdb; pdb.set_trace()
     wandb_writer = WanDBWriter(project=train_config.wandb_project, name=train_config.wandb_name, rank=rank)
 
+    log_every = int(os.environ.get("LOG_EVERY", "20"))
+
     accu_step = first_step
-    train_sampler.set_epoch(first_step)
+    if train_sampler is not None and hasattr(train_sampler, "set_epoch"):
+        train_sampler.set_epoch(first_step)
     epoch_start_time = time.perf_counter()
 
     with MemoryTrace() as memtrace:  # track the memory usage
         model.train()
         total_loss = 0.0
-        for step, batch in enumerate(tqdm(train_dataloader, colour="blue", desc=f"Training")):
+        show_progress = (not train_config.enable_fsdp) or (rank == 0)
+        progress = tqdm(
+            train_dataloader,
+            colour="blue",
+            desc="Training",
+            dynamic_ncols=True,
+            disable=not show_progress,
+        )
+        target_device = torch.device(local_rank) if train_config.enable_fsdp else next(model.parameters()).device
+        for step, batch in enumerate(progress):
             accu_step += 1
 
             for key in batch.keys():
                 if train_config.enable_fsdp:
                     batch[key] = batch[key].to(local_rank)
                 else:
-                    batch[key] = batch[key].to('cuda:0')
+                    if isinstance(batch[key], torch.Tensor):
+                        batch[key] = batch[key].to(target_device)
             loss = model(**batch).loss
             loss = loss / gradient_accumulation_steps
 
@@ -344,8 +384,22 @@ def train_partition(model,
                     'valid_loss': eval_epoch_loss
                 })
 
-            if not train_config.enable_fsdp or rank == 0:
-                print(f"\n step {step} is completed and loss is {loss.detach().float()}")
+            if (not train_config.enable_fsdp) or (rank == 0):
+                if (step == 0) or ((step + 1) % log_every == 0):
+                    print(f"\n step {step} is completed and loss is {loss.detach().float()}")
+
+            if show_progress and ((step == 0) or ((step + 1) % log_every == 0)):
+                try:
+                    lr = lr_scheduler.get_lr()[0]
+                except Exception:
+                    try:
+                        lr = lr_scheduler.get_last_lr()[0]
+                    except Exception:
+                        lr = None
+                progress.set_postfix({
+                    "loss": float(loss.detach().float()),
+                    **({"lr": lr} if lr is not None else {}),
+                })
 
     epoch_end_time = time.perf_counter() - epoch_start_time
     # Reducing total_loss across all devices if there's more than one CUDA device

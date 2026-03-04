@@ -186,6 +186,12 @@ def main(**kwargs):
     if not train_config.enable_fsdp or rank == 0:
         print(f"--> Training Set Length = {len(dataset_train)}")
 
+    if len(dataset_train) == 0:
+        raise ValueError(
+            "Training dataset is empty. Check that `--dataset_dir` points to a non-empty train.act.json. "
+            "Example: --dataset_dir ../generation/multiwoz/converters/woz.2.2.gen"
+        )
+
     dataset_val = get_preprocessed_dataset(
         tokenizer,
         dataset_config,
@@ -193,6 +199,9 @@ def main(**kwargs):
     )
     if not train_config.enable_fsdp or rank == 0:
             print(f"--> Validation Set Length = {len(dataset_val)}")
+
+    if train_config.run_validation and len(dataset_val) == 0:
+        print("Warning: validation dataset is empty; validation will likely fail or be meaningless.")
 
     train_sampler = None
     val_sampler = None

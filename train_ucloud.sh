@@ -72,7 +72,7 @@ if [ "$USE_FSDP" = true ]; then
         --output_dir ${SAVE_DIR} \
         --pure_bf16 \
         --dataset ${DATASET_NAME} \
-    --dataset_dir ${DATASET_DIR} \
+        --dataset_dir ${DATASET_DIR} \
         --dataset_type gen \
         --batch_size_training ${BATCH_SIZE} \
         --num_epochs ${EPOCH} \
@@ -124,7 +124,7 @@ if [ "$USE_FSDP" = true ]; then
         --output_dir ${SAVE_DIR_REAL} \
         --pure_bf16 \
         --dataset ${DATASET_NAME} \
-    --dataset_dir ${DATASET_DIR} \
+        --dataset_dir ${DATASET_DIR} \
         --dataset_type real \
         --batch_size_training ${BATCH_SIZE} \
         --num_epochs ${EPOCH} \
