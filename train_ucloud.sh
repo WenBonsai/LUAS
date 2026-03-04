@@ -1,9 +1,13 @@
 #!/bin/bash
+set -euo pipefail
 set -x
 
 # Configuration - modify based on your UCloud setup
 NUM_GPUS=1  # Change this to match your GPU count (1, 2, or 4)
 DATASET_NAME="agent_sft_act_dataset"
+
+# Directory that contains train.act.json (relative to ./training_scripts after cd)
+DATASET_DIR=${DATASET_DIR:-"../woz.2.2.gen"}
 
 export PYTHONPATH=`pwd`
 export HF_TOKEN=${HF_TOKEN:-"your_huggingface_token_here"}
@@ -13,6 +17,13 @@ echo "PYTHONPATH: ${PYTHONPATH}"
 echo "NUM_GPUS: ${NUM_GPUS}"
 
 cd ./training_scripts
+
+if [[ ! -f "${DATASET_DIR}/train.act.json" ]]; then
+    echo "Error: dataset file not found: ${DATASET_DIR}/train.act.json" >&2
+    echo "Tip: set DATASET_DIR to the folder containing train.act.json, e.g.:" >&2
+    echo "  DATASET_DIR=../woz.2.2.gen bash train_ucloud.sh" >&2
+    exit 1
+fi
 
 MODEL_TYPE="7b"
 LR=2e-5
@@ -73,6 +84,7 @@ else
         --output_dir ${SAVE_DIR} \
         --pure_bf16 \
         --dataset ${DATASET_NAME} \
+        --dataset_dir ${DATASET_DIR} \
         --dataset_type gen \
         --batch_size_training ${BATCH_SIZE} \
         --num_epochs ${EPOCH} \
@@ -123,6 +135,7 @@ else
         --output_dir ${SAVE_DIR_REAL} \
         --pure_bf16 \
         --dataset ${DATASET_NAME} \
+    --dataset_dir ${DATASET_DIR} \
         --dataset_type real \
         --batch_size_training ${BATCH_SIZE} \
         --num_epochs ${EPOCH} \
