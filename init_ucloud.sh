@@ -1,37 +1,44 @@
 #!/bin/bash
 # ============================================================
-# UCloud Initialization Script — fresh Ubuntu environment
-# Point UCloud's "Initialization" field at this file.
+# UCloud Initialization Script — Qwen2 LoRA DST Training
+# ============================================================
+# Usage: Upload this file to UCloud and point the job's
+#        "Initialization script" field at it, OR run manually:
 #
-# This script runs on a brand-new machine with nothing installed.
-# It will:
-#   1. Install system deps + Python
-#   2. Clone the LUAS repo from GitHub
-#   3. Create a venv and install Python packages
-#   4. Run training automatically
+#   bash init_ucloud.sh
 #
-# Override any variable via UCloud's "Extra options" field, e.g.:
-#   HF_TOKEN=hf_xxx CPU_TEST=0 MODEL_NAME=meta-llama/Llama-2-7b-hf
+# Optional environment overrides:
+#   MODEL_NAME=Qwen/Qwen2-1.5B-Instruct bash init_ucloud.sh
+#   MAX_STEPS=2400 bash init_ucloud.sh
+#   HF_TOKEN=hf_xxx bash init_ucloud.sh
 # ============================================================
 set -euo pipefail
 
+# ── Configuration (override via env) ─────────────────────────
 REPO_URL="https://github.com/WenBonsai/LUAS.git"
-REPO_DIR="/home/ucloud/LUAS"
-LOG_FILE="/home/ucloud/training_run.log"
-PYTHON_BIN="python3"
+REPO_DIR="${HOME}/LUAS"
+LOG_FILE="${HOME}/init_ucloud.log"
+MODEL_NAME="${MODEL_NAME:-Qwen/Qwen2-0.5B-Instruct}"
+MAX_STEPS="${MAX_STEPS:-1200}"
+MAX_SEQ_LEN="${MAX_SEQ_LEN:-256}"
+OUTPUT_DIR="${OUTPUT_DIR:-runs/qwen_lora_ucloud}"
+HF_TOKEN="${HF_TOKEN:-}"
 
-echo "========== UCloud init started at $(date) ==========" | tee -a "${LOG_FILE}"
+echo "========================================" | tee "${LOG_FILE}"
+echo " UCloud init started at $(date)"         | tee -a "${LOG_FILE}"
+echo " MODEL:     ${MODEL_NAME}"               | tee -a "${LOG_FILE}"
+echo " MAX_STEPS: ${MAX_STEPS}"               | tee -a "${LOG_FILE}"
+echo "========================================"| tee -a "${LOG_FILE}"
 
 # ── 1. System dependencies ───────────────────────────────────
 echo "[1/5] Installing system packages..." | tee -a "${LOG_FILE}"
-sudo apt-get update -qq 2>&1 | tee -a "${LOG_FILE}"
-sudo apt-get install -y -qq git python3 python3-pip python3-venv curl 2>&1 | tee -a "${LOG_FILE}"
+sudo apt-get update -qq
+sudo apt-get install -y -qq git python3 python3-pip python3-venv curl
 
-# ── 2. Clone repo (or pull if already exists) ────────────────
+# ── 2. Clone or update repo ──────────────────────────────────
 echo "[2/5] Cloning repo..." | tee -a "${LOG_FILE}"
 if [[ -d "${REPO_DIR}/.git" ]]; then
     cd "${REPO_DIR}"
-    git config --global pull.rebase true
     git pull --rebase origin main 2>&1 | tee -a "${LOG_FILE}"
 else
     git clone "${REPO_URL}" "${REPO_DIR}" 2>&1 | tee -a "${LOG_FILE}"
@@ -39,31 +46,71 @@ else
 fi
 
 # ── 3. Create virtualenv ─────────────────────────────────────
-echo "[3/5] Setting up Python virtualenv..." | tee -a "${LOG_FILE}"
+echo "[3/5] Setting up Python venv..." | tee -a "${LOG_FILE}"
 if [[ ! -f "${REPO_DIR}/.venv/bin/activate" ]]; then
-    ${PYTHON_BIN} -m venv "${REPO_DIR}/.venv" 2>&1 | tee -a "${LOG_FILE}"
+    python3 -m venv "${REPO_DIR}/.venv"
 fi
 source "${REPO_DIR}/.venv/bin/activate"
 
 # ── 4. Install Python dependencies ───────────────────────────
-echo "[4/5] Installing Python packages (this takes a few minutes)..." | tee -a "${LOG_FILE}"
+echo "[4/5] Installing Python packages..." | tee -a "${LOG_FILE}"
 pip install --upgrade pip --quiet
-pip install -r "${REPO_DIR}/requirements.txt" --quiet 2>&1 | tee -a "${LOG_FILE}"
+
+# Auto-detect CUDA and install matching torch
+if nvidia-smi &>/dev/null; then
+    CUDA_VER=$(nvidia-smi | grep -oP "CUDA Version: \K[\d]+" | head -1)
+    echo "  GPU detected — CUDA ${CUDA_VER}" | tee -a "${LOG_FILE}"
+    if [[ "${CUDA_VER}" -ge 12 ]]; then
+        pip install torch --index-url https://download.pytorch.org/whl/cu121 --quiet
+    else
+        pip install torch --index-url https://download.pytorch.org/whl/cu118 --quiet
+    fi
+else
+    echo "  No GPU — installing CPU torch" | tee -a "${LOG_FILE}"
+    pip install torch --index-url https://download.pytorch.org/whl/cpu --quiet
+fi
+
+pip install transformers peft datasets accelerate sentencepiece protobuf --quiet
+echo "  Packages installed OK" | tee -a "${LOG_FILE}"
 
 # ── 5. Run training ──────────────────────────────────────────
 echo "[5/5] Starting training at $(date)..." | tee -a "${LOG_FILE}"
 
-export HF_TOKEN="${HF_TOKEN:-}"
-export HUGGING_FACE_HUB_TOKEN="${HF_TOKEN}"
-export LOG_EVERY="${LOG_EVERY:-10}"
-export DATASET_DIR="${DATASET_DIR:-../generation/multiwoz/converters/woz.2.2.gen}"
-export CPU_TEST="${CPU_TEST:-1}"           # 1 = TinyLlama smoke-test, 0 = full Llama-2 run
-export MODEL_NAME="${MODEL_NAME:-TinyLlama/TinyLlama-1.1B-Chat-v1.0}"
+# Set HF token if provided
+if [[ -n "${HF_TOKEN}" ]]; then
+    export HF_TOKEN="${HF_TOKEN}"
+    export HUGGING_FACE_HUB_TOKEN="${HF_TOKEN}"
+fi
 
-echo "MODEL:      ${MODEL_NAME}"          | tee -a "${LOG_FILE}"
-echo "CPU_TEST:   ${CPU_TEST}"            | tee -a "${LOG_FILE}"
-echo "DATASET_DIR:${DATASET_DIR}"         | tee -a "${LOG_FILE}"
+mkdir -p "${REPO_DIR}/${OUTPUT_DIR}"
 
-bash "${REPO_DIR}/train_ucloud.sh" 2>&1 | tee -a "${LOG_FILE}"
+python3 -u scripts/train_qwen_lora.py \
+    --train_file data_full/train.jsonl \
+    --dev_file   data_full/dev.jsonl \
+    --model_name "${MODEL_NAME}" \
+    --max_steps  "${MAX_STEPS}" \
+    --max_seq_len "${MAX_SEQ_LEN}" \
+    --output_dir  "${OUTPUT_DIR}" \
+    2>&1 | tee -a "${LOG_FILE}"
 
-echo "========== Training finished at $(date) ==========" | tee -a "${LOG_FILE}"
+echo "========================================" | tee -a "${LOG_FILE}"
+echo " Training finished at $(date)"           | tee -a "${LOG_FILE}"
+echo " Adapter saved to: ${OUTPUT_DIR}/lora_adapter" | tee -a "${LOG_FILE}"
+echo "========================================"| tee -a "${LOG_FILE}"
+
+# ── 6. Run evaluation ────────────────────────────────────────
+echo "[+] Running evaluation..." | tee -a "${LOG_FILE}"
+
+python3 -u scripts/eval_qwen_lora.py \
+    --model_name  "${MODEL_NAME}" \
+    --adapter_dir "${OUTPUT_DIR}/lora_adapter" \
+    --data_file   data_full/dev.jsonl \
+    --max_examples 0 \
+    --max_new_tokens 128 \
+    --dst_metrics \
+    2>&1 | tee -a "${LOG_FILE}"
+
+echo "========================================" | tee -a "${LOG_FILE}"
+echo " All done at $(date)"                    | tee -a "${LOG_FILE}"
+echo " Full log: ${LOG_FILE}"                  | tee -a "${LOG_FILE}"
+echo "========================================"| tee -a "${LOG_FILE}"
