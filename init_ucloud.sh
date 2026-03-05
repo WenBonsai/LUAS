@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 # ============================================================
 # UCloud Initialization Script — Qwen2 LoRA DST Training
 # ============================================================
@@ -37,7 +37,7 @@ sudo apt-get install -y -qq git python3 python3-pip python3-venv curl
 
 # ── 2. Clone or update repo ──────────────────────────────────
 echo "[2/5] Cloning repo..." | tee -a "${LOG_FILE}"
-if [[ -d "${REPO_DIR}/.git" ]]; then
+if [ -d "${REPO_DIR}/.git" ]; then
     cd "${REPO_DIR}"
     git pull --rebase origin main 2>&1 | tee -a "${LOG_FILE}"
 else
@@ -47,7 +47,7 @@ fi
 
 # ── 3. Create virtualenv ─────────────────────────────────────
 echo "[3/5] Setting up Python venv..." | tee -a "${LOG_FILE}"
-if [[ ! -f "${REPO_DIR}/.venv/bin/activate" ]]; then
+if [ ! -f "${REPO_DIR}/.venv/bin/activate" ]; then
     python3 -m venv "${REPO_DIR}/.venv"
 fi
 source "${REPO_DIR}/.venv/bin/activate"
@@ -60,7 +60,7 @@ pip install --upgrade pip --quiet
 if nvidia-smi >/dev/null 2>&1; then
     CUDA_VER=$(nvidia-smi | grep -oP "CUDA Version: \K[\d]+" | head -1)
     echo "  GPU detected — CUDA ${CUDA_VER}" | tee -a "${LOG_FILE}"
-    if [[ "${CUDA_VER}" -ge 12 ]]; then
+    if [ "${CUDA_VER}" -ge 12 ]; then
         pip install torch --index-url https://download.pytorch.org/whl/cu121 --quiet
     else
         pip install torch --index-url https://download.pytorch.org/whl/cu118 --quiet
@@ -77,7 +77,7 @@ echo "  Packages installed OK" | tee -a "${LOG_FILE}"
 echo "[5/5] Starting training at $(date)..." | tee -a "${LOG_FILE}"
 
 # Set HF token if provided
-if [[ -n "${HF_TOKEN}" ]]; then
+if [ -n "${HF_TOKEN}" ]; then
     export HF_TOKEN="${HF_TOKEN}"
     export HUGGING_FACE_HUB_TOKEN="${HF_TOKEN}"
 fi
