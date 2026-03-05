@@ -12,7 +12,7 @@
 #   MAX_STEPS=2400 bash init_ucloud.sh
 #   HF_TOKEN=hf_xxx bash init_ucloud.sh
 # ============================================================
-set -euo pipefail
+set -eu
 
 # ── Configuration (override via env) ─────────────────────────
 REPO_URL="https://github.com/WenBonsai/LUAS.git"
@@ -57,7 +57,7 @@ echo "[4/5] Installing Python packages..." | tee -a "${LOG_FILE}"
 pip install --upgrade pip --quiet
 
 # Auto-detect CUDA and install matching torch
-if nvidia-smi &>/dev/null; then
+if nvidia-smi >/dev/null 2>&1; then
     CUDA_VER=$(nvidia-smi | grep -oP "CUDA Version: \K[\d]+" | head -1)
     echo "  GPU detected — CUDA ${CUDA_VER}" | tee -a "${LOG_FILE}"
     if [[ "${CUDA_VER}" -ge 12 ]]; then
