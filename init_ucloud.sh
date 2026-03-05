@@ -114,3 +114,16 @@ echo "========================================" | tee -a "${LOG_FILE}"
 echo " All done at $(date)"                    | tee -a "${LOG_FILE}"
 echo " Full log: ${LOG_FILE}"                  | tee -a "${LOG_FILE}"
 echo "========================================"| tee -a "${LOG_FILE}"
+
+# ── 7. Save log to GitHub ────────────────────────────────────
+echo "[+] Saving log to GitHub..." | tee -a "${LOG_FILE}"
+cd "${REPO_DIR}"
+LOG_DEST="logs/$(date +%Y%m%d_%H%M%S)_ucloud.log"
+mkdir -p logs
+cp "${LOG_FILE}" "${LOG_DEST}"
+git config user.email "ucloud@job"
+git config user.name "UCloud Job"
+git add "${LOG_DEST}"
+git commit -m "Add training log: ${LOG_DEST}" 2>&1 | tee -a "${LOG_FILE}"
+git push origin main 2>&1 | tee -a "${LOG_FILE}"
+echo "[+] Log saved to repo: ${LOG_DEST}" | tee -a "${LOG_FILE}"
